@@ -60,45 +60,81 @@ export default function App() {
   }, []);
 
   const processData = (rawData) => {
-    const now = new Date();
+  const now = Date.now();
 
-    const processed = rawData.map(row => {
-      let originalDate = null;
-      let reissuedDate = null;
+  const processed = rawData.map(row => {
+    let daysOpenOrig = 0;
+    let daysOpenReiss = 0;
 
-      if (row.originalcorrectbydate) {
-        const val = row.originalcorrectbydate;
-        if (typeof val === 'number') {
-          originalDate = new Date(val * 1000);
-        } else if (typeof val === 'string') {
-          originalDate = new Date(val);
+    // Parse originalcorrectbydate
+    if (row.originalcorrectbydate) {
+      try {
+        let timestamp;
+        if (typeof row.originalcorrectbydate === 'number') {
+          // Unix timestamp in seconds
+          timestamp = row.originalcorrectbydate * 1000;
+        } else if (typeof row.originalcorrectbydate === 'string') {
+          // ISO string or other format
+          timestamp = new Date(row.originalcorrectbydate).getTime();
         }
-      }
-
-      if (row.newcorrectbydate) {
-        const val = row.newcorrectbydate;
-        if (typeof val === 'number') {
-          reissuedDate = new Date(val * 1000);
-        } else if (typeof val === 'string') {
-          reissuedDate = new Date(val);
+        if (timestamp && !isNaN(timestamp)) {
+          daysOpenOrig = Math.max(0, Math.floor((now - timestamp) / (1000 * 60 * 60 * 24)));
         }
+      } catch (e) {
+        daysOpenOrig = 0;
       }
+    }
 
-      const daysOpenOrig = originalDate && !isNaN(originalDate.getTime())
-        ? Math.max(0, Math.floor((now - originalDate) / (1000 * 60 * 60 * 24)))
-        : 0;
+    // Parse newcorrectbydate
+    if (row.newcorrectbydate) {
+      try {
+        let timestamp;
+        if (typeof row.newcorrectbydate === 'number') {
+          timestamp = row.newcorrectbydate * 1000;
+        } else if (typeof row.newcorrectbydate === 'string') {
+          timestamp = new Date(row.newcorrectbydate).getTime();
+        }
+        if (timestamp && !isNaN(timestamp)) {
+          daysOpenReiss = Math.max(0, Math.floor((now - timestamp) / (1000 * 60 * 60 * 24)));
+        }
+      } catch (e) {
+        daysOpenReiss = 0;
+      }
+    }
 
-      const daysOpenReiss = reissuedDate && !isNaN(reissuedDate.getTime())
-        ? Math.max(0, Math.floor((now - reissuedDate) / (1000 * 60 * 60 * 24)))
-        : 0;
+    return {
+      ...row,
+      daysOpenOriginal: daysOpenOrig,
+      daysOpenReissued: daysOpenReiss,
+      isReissued: row.newcorrectbydate !== null && row.newcorrectbydate !== undefined
+    };
+  });
 
-      return {
-        ...row,
-        daysOpenOriginal: daysOpenOrig,
-        daysOpenReissued: daysOpenReiss,
-        isReissued: reissuedDate !== null
-      };
-    });
+  setData(processed);
+
+  // Don't filter by > 0, just use what we have
+  const original = processed.filter(v => !v.isReissued);
+  const reissued = processed.filter(v => v.isReissued);
+
+  const originalAvg = original.length > 0
+    ? Math.round(original.reduce((sum, v) => sum + v.daysOpenOriginal, 0) / original.length)
+    : 0;
+
+  const reissuedAvg = reissued.length > 0
+    ? Math.round(reissued.reduce((sum, v) => sum + v.daysOpenReissued, 0) / reissued.length)
+    : 0;
+
+  const multiplier = originalAvg > 0 && reissuedAvg > 0 ? (reissuedAvg / originalAvg).toFixed(1) : 0;
+
+  setMetrics({
+    originalAvg,
+    reissuedAvg,
+    multiplier,
+    total: processed.length,
+    original,
+    reissued
+  });
+};
 
     setData(processed);
 
