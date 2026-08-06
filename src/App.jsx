@@ -63,21 +63,47 @@ export default function App() {
     const now = new Date();
 
     const processed = rawData.map(row => {
-      const originalDate = row.originalcorrectbydate ? new Date(row.originalcorrectbydate * 1000) : null;
-      const reissuedDate = row.newcorrectbydate ? new Date(row.newcorrectbydate * 1000) : null;
+      let originalDate = null;
+      let reissuedDate = null;
+
+      if (row.originalcorrectbydate) {
+        const val = row.originalcorrectbydate;
+        if (typeof val === 'number') {
+          originalDate = new Date(val * 1000);
+        } else if (typeof val === 'string') {
+          originalDate = new Date(val);
+        }
+      }
+
+      if (row.newcorrectbydate) {
+        const val = row.newcorrectbydate;
+        if (typeof val === 'number') {
+          reissuedDate = new Date(val * 1000);
+        } else if (typeof val === 'string') {
+          reissuedDate = new Date(val);
+        }
+      }
+
+      const daysOpenOrig = originalDate && !isNaN(originalDate.getTime())
+        ? Math.max(0, Math.floor((now - originalDate) / (1000 * 60 * 60 * 24)))
+        : 0;
+
+      const daysOpenReiss = reissuedDate && !isNaN(reissuedDate.getTime())
+        ? Math.max(0, Math.floor((now - reissuedDate) / (1000 * 60 * 60 * 24)))
+        : 0;
 
       return {
         ...row,
-        daysOpenOriginal: originalDate ? Math.floor((now - originalDate) / (1000 * 60 * 60 * 24)) : 0,
-        daysOpenReissued: reissuedDate ? Math.floor((now - reissuedDate) / (1000 * 60 * 60 * 24)) : 0,
+        daysOpenOriginal: daysOpenOrig,
+        daysOpenReissued: daysOpenReiss,
         isReissued: reissuedDate !== null
       };
     });
 
     setData(processed);
 
-    const original = processed.filter(v => !v.isReissued);
-    const reissued = processed.filter(v => v.isReissued);
+    const original = processed.filter(v => !v.isReissued && v.daysOpenOriginal > 0);
+    const reissued = processed.filter(v => v.isReissued && v.daysOpenReissued > 0);
 
     const originalAvg = original.length > 0
       ? Math.round(original.reduce((sum, v) => sum + v.daysOpenOriginal, 0) / original.length)
@@ -134,17 +160,13 @@ export default function App() {
   };
 
   const getReissueData = () => {
-    if (!metrics) return null;
-    const { original, reissued } = metrics;
-    
+    if (!metrics || !metrics.original.length || !metrics.reissued.length) return null;
+
     return {
       labels: ['Original', 'Reissued'],
       datasets: [{
         label: 'Average Days Open',
-        data: [
-          Math.round(original.reduce((sum, v) => sum + v.daysOpenOriginal, 0) / original.length),
-          Math.round(reissued.reduce((sum, v) => sum + v.daysOpenReissued, 0) / reissued.length)
-        ],
+        data: [metrics.originalAvg, metrics.reissuedAvg],
         backgroundColor: ['#3b82f6', '#dc2626'],
         borderColor: ['#1e40af', '#991b1b'],
         borderWidth: 2
@@ -159,13 +181,16 @@ export default function App() {
       if (!statusData[v.currentstatus]) {
         statusData[v.currentstatus] = [];
       }
-      statusData[v.currentstatus].push(v.daysOpenOriginal || v.daysOpenReissued);
+      const days = v.daysOpenOriginal || v.daysOpenReissued;
+      if (days > 0) {
+        statusData[v.currentstatus].push(days);
+      }
     });
 
     const statusAvg = Object.entries(statusData)
       .map(([status, days]) => ({
         status,
-        avg: Math.round(days.reduce((a, b) => a + b, 0) / days.length),
+        avg: days.length > 0 ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0,
         count: days.length
       }))
       .sort((a, b) => b.avg - a.avg)
@@ -251,56 +276,62 @@ export default function App() {
             </div>
           </div>
 
-          <div style={styles.chartSection}>
-            <h2 style={styles.chartTitle}>🔴 The Reissuance Killer</h2>
-            <p style={styles.description}>
-              Original violations average ~6 years open. Once reissued, they average ~32 years — stuck in legal limbo.
-            </p>
-            <div style={styles.chartContainer}>
-              <Bar data={getReissueData()} options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  y: {
-                    ticks: {
-                      callback: v => (v / 365).toFixed(1) + ' yrs'
+          {getReissueData() && (
+            <div style={styles.chartSection}>
+              <h2 style={styles.chartTitle}>🔴 The Reissuance Killer</h2>
+              <p style={styles.description}>
+                Original violations average ~6 years open. Once reissued, they average ~32 years — stuck in legal limbo.
+              </p>
+              <div style={styles.chartContainer}>
+                <Bar data={getReissueData()} options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    y: {
+                      ticks: {
+                        callback: v => (v / 365).toFixed(1) + ' yrs'
+                      }
                     }
                   }
-                }
-              }} />
+                }} />
+              </div>
             </div>
-          </div>
+          )}
 
-          <div style={styles.chartSection}>
-            <h2 style={styles.chartTitle}>🏗️ Chronic Offender Buildings</h2>
-            <div style={styles.chartContainer}>
-              <Bar data={getChronicBuildingsData()} options={{
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } }
-              }} />
+          {getChronicBuildingsData() && (
+            <div style={styles.chartSection}>
+              <h2 style={styles.chartTitle}>🏗️ Chronic Offender Buildings</h2>
+              <div style={styles.chartContainer}>
+                <Bar data={getChronicBuildingsData()} options={{
+                  indexAxis: 'y',
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } }
+                }} />
+              </div>
             </div>
-          </div>
+          )}
 
-          <div style={styles.chartSection}>
-            <h2 style={styles.chartTitle}>📋 Violations Stuck by Status Code</h2>
-            <div style={styles.chartContainer}>
-              <Bar data={getStatusData()} options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  y: {
-                    ticks: {
-                      callback: v => (v / 365).toFixed(1) + ' yrs'
+          {getStatusData() && (
+            <div style={styles.chartSection}>
+              <h2 style={styles.chartTitle}>📋 Violations Stuck by Status Code</h2>
+              <div style={styles.chartContainer}>
+                <Bar data={getStatusData()} options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    y: {
+                      ticks: {
+                        callback: v => (v / 365).toFixed(1) + ' yrs'
+                      }
                     }
                   }
-                }
-              }} />
+                }} />
+              </div>
             </div>
-          </div>
+          )}
 
           {getRentImpairingData() && (
             <div style={styles.chartSection}>
