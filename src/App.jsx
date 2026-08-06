@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Line, Bar } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -32,7 +32,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [metrics, setMetrics] = useState(null);
 
-  const fetchViolations = async (zipCode) => {
+  const fetchViolations = React.useCallback(async (zipCode) => {
     setLoading(true);
     setError(null);
 
@@ -57,7 +57,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const processData = (rawData) => {
     const now = new Date();
@@ -76,7 +76,6 @@ export default function App() {
 
     setData(processed);
 
-    // Calculate metrics
     const original = processed.filter(v => !v.isReissued);
     const reissued = processed.filter(v => v.isReissued);
 
@@ -102,7 +101,7 @@ export default function App() {
 
   useEffect(() => {
     fetchViolations(zip);
-  }, []);
+  }, [zip, fetchViolations]);
 
   const handleSearch = () => {
     if (zip.length === 5 && !isNaN(zip)) {
@@ -229,7 +228,6 @@ export default function App() {
 
       {data && metrics && (
         <div style={styles.content}>
-          {/* Metrics */}
           <div style={styles.metrics}>
             <div style={styles.metric}>
               <div style={styles.metricLabel}>Original Violations</div>
@@ -253,7 +251,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Reissuance Chart */}
           <div style={styles.chartSection}>
             <h2 style={styles.chartTitle}>🔴 The Reissuance Killer</h2>
             <p style={styles.description}>
@@ -275,7 +272,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Chronic Buildings */}
           <div style={styles.chartSection}>
             <h2 style={styles.chartTitle}>🏗️ Chronic Offender Buildings</h2>
             <div style={styles.chartContainer}>
@@ -288,7 +284,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Status Analysis */}
           <div style={styles.chartSection}>
             <h2 style={styles.chartTitle}>📋 Violations Stuck by Status Code</h2>
             <div style={styles.chartContainer}>
@@ -307,7 +302,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Rent-Impairing */}
           {getRentImpairingData() && (
             <div style={styles.chartSection}>
               <h2 style={styles.chartTitle}>🔥 Rent-Impairing Violations (Direct Tenant Impact)</h2>
@@ -327,7 +321,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Data Table */}
           <div style={styles.chartSection}>
             <h2 style={styles.chartTitle}>📊 Sample Violations</h2>
             <table style={styles.table}>
